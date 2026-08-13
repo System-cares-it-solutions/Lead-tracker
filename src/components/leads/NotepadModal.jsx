@@ -3,7 +3,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { Phone, Mail, Users, FileText, Plus, Save, X, Trash2 } from 'lucide-react';
 
-export default function NotepadModal({ isOpen, onClose, lead, initialNotes = '', onSave, onAddActivity }) {
+export default function NotepadModal({ isOpen, onClose, lead, initialNotes = '', onSave, onAddActivity, onStatusChange }) {
   const [notes, setNotes] = useState('');
   const [activityType, setActivityType] = useState('note');
   const [saving, setSaving] = useState(false);
@@ -19,8 +19,19 @@ export default function NotepadModal({ isOpen, onClose, lead, initialNotes = '',
     if (!lead) return;
     try {
       setSaving(true);
+      const noteText = notes.trim();
       if (onSave) {
-        await onSave(lead.id, { notes: notes.trim() });
+        await onSave(lead.id, { notes: noteText });
+      }
+      if (onAddActivity && noteText) {
+        await onAddActivity(lead.id, {
+          type: activityType || 'note',
+          note: noteText,
+          text: noteText,
+        });
+      }
+      if ((lead.status || 'New') === 'New' && onStatusChange) {
+        await onStatusChange(lead.id, 'Contacted');
       }
       onClose();
     } catch (err) {
@@ -44,6 +55,9 @@ export default function NotepadModal({ isOpen, onClose, lead, initialNotes = '',
       // Also update main notes if requested
       if (onSave) {
         await onSave(lead.id, { notes: notes.trim() });
+      }
+      if ((lead.status || 'New') === 'New' && onStatusChange) {
+        await onStatusChange(lead.id, 'Contacted');
       }
       onClose();
     } catch (err) {

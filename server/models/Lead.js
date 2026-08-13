@@ -29,6 +29,7 @@ const leadSchema = new mongoose.Schema(
     createdBy: { type: String, default: null },
     createdByRole: { type: String, default: null },
     expirationWarned: { type: Boolean, default: false },
+    notifiedNew24h: { type: Boolean, default: false },
     trashedAt: { type: Date, default: null },
   },
   { timestamps: true }

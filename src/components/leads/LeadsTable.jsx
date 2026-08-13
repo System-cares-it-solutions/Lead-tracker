@@ -38,7 +38,7 @@ export default function LeadsTable({
   onAddActivity,
   onStatusChange,
   showAssignAction = false,
-  hideImportExcel = false,
+  hideImportExcel = true,
 }) {
   const { user } = useAuth();
   const fileInputRef = useRef(null);
@@ -111,12 +111,41 @@ export default function LeadsTable({
 
   const handleSaveNotepad = async (leadId, updates) => {
     const newNotes = updates.notes;
+    const targetLead = leads.find((l) => l.id === leadId);
+    const isNewLead = (targetLead?.status || 'New') === 'New';
+
     setLeads((prev) =>
-      prev.map((l) => (l.id === leadId ? { ...l, notes: newNotes } : l))
+      prev.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              notes: newNotes,
+              status: isNewLead ? 'Contacted' : l.status,
+            }
+          : l
+      )
     );
+
+    if (isNewLead && onStatusChange) {
+      onStatusChange(leadId, 'Contacted').catch((err) =>
+        console.error('Failed to update status to Contacted on note save:', err)
+      );
+    }
+
+    if (onAddActivity && newNotes && newNotes.trim()) {
+      onAddActivity(leadId, {
+        type: 'note',
+        note: newNotes.trim(),
+        text: newNotes.trim(),
+        authorName: user?.name || 'System',
+      }).catch((err) => console.error('Failed to log activity for note:', err));
+    }
+
     if (onUpdateLeadDetails) {
       try {
-        await onUpdateLeadDetails(leadId, { notes: newNotes });
+        const payload = { notes: newNotes };
+        if (isNewLead) payload.status = 'Contacted';
+        await onUpdateLeadDetails(leadId, payload);
       } catch (err) {
         console.error('Failed to update notes:', err);
       }
@@ -289,20 +318,7 @@ export default function LeadsTable({
     if (status === 'Trash') {
       return { rowClass: 'row-expired', statusText: 'In Trash', daysVal: 0 };
     }
-    if (!createdAt) return { rowClass: '', statusText: '—', daysVal: 0 };
-    const createdTime = new Date(createdAt).getTime();
-    if (isNaN(createdTime)) return { rowClass: '', statusText: '—', daysVal: 0 };
-
-    const elapsedHours = (Date.now() - createdTime) / (60 * 60 * 1000);
-    const remainingHours = 24 - elapsedHours;
-
-    if (remainingHours <= 0) {
-      return { rowClass: 'row-expired', statusText: 'Moved to Trash', daysVal: 0 };
-    } else if (remainingHours <= 6) {
-      return { rowClass: 'row-warning', statusText: `${remainingHours.toFixed(1)} hrs remaining`, daysVal: remainingHours / 24 };
-    } else {
-      return { rowClass: 'row-normal', statusText: `${remainingHours.toFixed(1)} hrs remaining`, daysVal: remainingHours / 24 };
-    }
+    return { rowClass: 'row-normal', statusText: status || 'New', daysVal: 0 };
   };
 
   /**
@@ -346,10 +362,20 @@ export default function LeadsTable({
     const leadId = targetLead.id;
     const currentCount = Number(targetLead.callCount) || 0;
     const newCount = currentCount + 1;
+    const currentStatus = targetLead.status || 'New';
+    const shouldSetContacted = currentStatus === 'New' || !targetLead.status;
 
-    // 1. Update attempt count in local state & localStorage
+    // 1. Update attempt count & status in local state & localStorage
     setLeads((prev) => {
-      const updated = prev.map((l) => (l.id === leadId ? { ...l, callCount: newCount } : l));
+      const updated = prev.map((l) =>
+        l.id === leadId
+          ? {
+              ...l,
+              callCount: newCount,
+              status: shouldSetContacted ? 'Contacted' : l.status,
+            }
+          : l
+      );
       try {
         localStorage.setItem('lead_tracker_leads', JSON.stringify(updated));
       } catch (e) {
@@ -358,8 +384,19 @@ export default function LeadsTable({
       return updated;
     });
 
-    // 2. Sync updated attempt count to backend
-    if (onUpdateLeadDetails) {
+    // 2. Sync updated attempt count & status to backend
+    if (shouldSetContacted) {
+      if (onStatusChange) {
+        onStatusChange(leadId, 'Contacted').catch((err) =>
+          console.error('Failed to sync status change:', err)
+        );
+      }
+      if (onUpdateLeadDetails) {
+        onUpdateLeadDetails(leadId, { callCount: newCount, status: 'Contacted' }).catch((err) =>
+          console.error('Failed to sync attempt count & status:', err)
+        );
+      }
+    } else if (onUpdateLeadDetails) {
       onUpdateLeadDetails(leadId, { callCount: newCount }).catch((err) =>
         console.error('Failed to sync attempt count:', err)
       );
@@ -372,13 +409,13 @@ export default function LeadsTable({
 
       if (actionType === 'call') {
         type = 'call';
-        note = `Phone call attempt #${newCount} made to lead (${targetLead.phone || 'No phone'}).`;
+        note = `Phone call attempt #${newCount} made to lead (${targetLead.phone || 'No phone'}).` + (shouldSetContacted ? ' Status changed to Contacted.' : '');
       } else if (actionType === 'mail') {
         type = 'email';
-        note = `Email contact attempt #${newCount} sent to lead (${targetLead.email || 'No email'}).`;
+        note = `Email contact attempt #${newCount} sent to lead (${targetLead.email || 'No email'}).` + (shouldSetContacted ? ' Status changed to Contacted.' : '');
       } else if (actionType === 'whatsapp') {
         type = 'note';
-        note = `WhatsApp message attempt #${newCount} initiated with lead (${targetLead.phone || 'No phone'}).`;
+        note = `WhatsApp message attempt #${newCount} initiated with lead (${targetLead.phone || 'No phone'}).` + (shouldSetContacted ? ' Status changed to Contacted.' : '');
       }
 
       onAddActivity(leadId, {
@@ -911,9 +948,6 @@ export default function LeadsTable({
               <th>Location</th>
               <th>Assigned to</th>
               <th>Status</th>
-              <th>Time Remaining</th>
-              <th>Call Attempts</th>
-              <th>Notes</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -1046,53 +1080,6 @@ export default function LeadsTable({
                       <option value="Trash">Trash</option>
                     </select>
                   </td>
-                  <td
-                    className="leads-table__secondary"
-                    style={{
-                      whiteSpace: 'nowrap',
-                      fontWeight: '600',
-                      color: rowClass === 'row-expired' ? 'var(--color-danger)' : rowClass === 'row-warning' ? 'var(--color-warning)' : 'inherit'
-                    }}
-                    title={statusText}
-                  >
-                    {statusText}
-                  </td>
-                  <td>
-                    <select
-                      value={lead.callCount || 0}
-                      onChange={(e) => handleCallCountChange(lead.id, Number(e.target.value))}
-                      className="leads-table__call-select"
-                      title={`Call attempts for ${lead.name}`}
-                    >
-                      {[0, 1, 2, 3, 4, 5].map((num) => (
-                        <option key={num} value={num}>
-                          {num} {num === 1 ? 'attempt' : 'attempts'}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="leads-table__secondary leads-table__notes" style={{ minWidth: '180px' }}>
-                    <div
-                      onClick={() => handleOpenNotepad(lead)}
-                      title="Click to open Popup Notepad"
-                      style={{
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justify: 'space-between',
-                        padding: '0.35rem 0.6rem',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(99, 102, 241, 0.08)',
-                        border: '1px solid rgba(99, 102, 241, 0.2)',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.825rem', color: 'var(--color-text)' }}>
-                        {lead.notes || '—'}
-                      </span>
-                      <Notebook size={14} style={{ opacity: 0.85, flexShrink: 0, marginLeft: '0.4rem', color: 'var(--color-primary)' }} />
-                    </div>
-                  </td>
                   <td>
                     <div className="leads-table__actions" style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                       {lead.phone && lead.phone !== '—' && (
@@ -1135,11 +1122,11 @@ export default function LeadsTable({
                       <Button
                         variant="secondary"
                         className="leads-table__icon-btn"
-                        onClick={() => setActiveShareProductLead(lead)}
-                        title="Share Product with Lead (via WhatsApp or Email)"
-                        style={{ color: '#10b981', borderColor: 'rgba(16, 185, 129, 0.3)' }}
+                        onClick={() => handleOpenNotepad(lead)}
+                        title="Open Lead Notes / Notepad"
+                        style={{ color: 'var(--color-primary)', borderColor: 'rgba(99, 102, 241, 0.3)' }}
                       >
-                        <Share2 size={16} />
+                        <Notebook size={16} />
                       </Button>
                       {currentUserRole === 'employee' && (
                         <Button
@@ -1184,6 +1171,7 @@ export default function LeadsTable({
         lead={activeNotepadLead}
         onSave={handleSaveNotepad}
         onAddActivity={onAddActivity}
+        onStatusChange={onStatusChange}
       />
 
       {/* Swap Lead Modal */}
@@ -1205,6 +1193,7 @@ export default function LeadsTable({
         onClose={() => setActiveShareProductLead(null)}
         lead={activeShareProductLead}
         onAddActivity={onAddActivity}
+        onStatusChange={onStatusChange}
       />
     </div>
   );

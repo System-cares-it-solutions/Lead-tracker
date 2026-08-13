@@ -14,10 +14,11 @@ import '../products/ShareProductModal.css';
  *   isOpen: boolean,
  *   onClose: () => void,
  *   lead: object|null,
- *   onAddActivity?: (leadId: string, activity: object) => Promise<void>
+ *   onAddActivity?: (leadId: string, activity: object) => Promise<void>,
+ *   onStatusChange?: (leadId: string, status: string) => Promise<void>
  * }} props
  */
-export default function ShareProductToLeadModal({ isOpen, onClose, lead, onAddActivity }) {
+export default function ShareProductToLeadModal({ isOpen, onClose, lead, onAddActivity, onStatusChange }) {
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -105,11 +106,20 @@ ${user?.name || 'Lead Tracker Team'}`;
 
     window.open(waUrl, '_blank', 'noopener,noreferrer');
 
+    const leadId = lead.id || lead._id;
+    if ((lead.status || 'New') === 'New' && onStatusChange) {
+      try {
+        await onStatusChange(leadId, 'Contacted');
+      } catch (e) {
+        console.error('Failed to update status to Contacted:', e);
+      }
+    }
+
     if (onAddActivity && selectedProduct) {
       try {
-        await onAddActivity(lead.id || lead._id, {
+        await onAddActivity(leadId, {
           type: 'note',
-          note: `Shared product "${selectedProduct.name}" via WhatsApp.`,
+          note: `Shared product "${selectedProduct.name}" via WhatsApp. Status set to Contacted.`,
           authorName: user?.name || 'System',
           timestamp: new Date().toISOString(),
         });
@@ -118,7 +128,7 @@ ${user?.name || 'Lead Tracker Team'}`;
       }
     }
 
-    setSentSuccessMsg(`Product "${selectedProduct?.name}" shared via WhatsApp with ${lead.name}! Activity logged.`);
+    setSentSuccessMsg(`Product "${selectedProduct?.name}" shared via WhatsApp with ${lead.name}! Status updated to Contacted.`);
   };
 
   /* ── Share via Email ── */
@@ -129,11 +139,20 @@ ${user?.name || 'Lead Tracker Team'}`;
 
     window.open(mailtoUrl, '_self');
 
+    const leadId = lead.id || lead._id;
+    if ((lead.status || 'New') === 'New' && onStatusChange) {
+      try {
+        await onStatusChange(leadId, 'Contacted');
+      } catch (e) {
+        console.error('Failed to update status to Contacted:', e);
+      }
+    }
+
     if (onAddActivity && selectedProduct) {
       try {
-        await onAddActivity(lead.id || lead._id, {
+        await onAddActivity(leadId, {
           type: 'note',
-          note: `Shared product "${selectedProduct.name}" via Email.`,
+          note: `Shared product "${selectedProduct.name}" via Email. Status set to Contacted.`,
           authorName: user?.name || 'System',
           timestamp: new Date().toISOString(),
         });
@@ -142,7 +161,7 @@ ${user?.name || 'Lead Tracker Team'}`;
       }
     }
 
-    setSentSuccessMsg(`Product "${selectedProduct?.name}" shared via Email with ${lead.name}! Activity logged.`);
+    setSentSuccessMsg(`Product "${selectedProduct?.name}" shared via Email with ${lead.name}! Status updated to Contacted.`);
   };
 
   const footer = (

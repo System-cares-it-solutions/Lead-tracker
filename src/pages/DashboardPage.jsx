@@ -59,19 +59,23 @@ export default function DashboardPage() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
     const TWENTY_THREE_HOURS_MS = 23 * 60 * 60 * 1000;
     const now = Date.now();
 
     return leads.filter((l) => {
       if (l.status === 'Won' || l.status === 'Lost' || l.status === 'Trash') return false;
 
+      // Check if lead is in New status for 24+ hours
+      const isNew24h = (l.status || 'New') === 'New' && l.createdAt && (now - new Date(l.createdAt).getTime()) >= TWENTY_FOUR_HOURS_MS;
+
       // Check if scheduled followUpDate is today or earlier
       const isScheduledDue = l.followUpDate && new Date(l.followUpDate) < tomorrow;
 
-      // Check if lead is within 1 hour of 24h expiration (23+ hrs old)
+      // Check if lead is 23+ hrs old
       const isExpiringSoon = l.createdAt && (now - new Date(l.createdAt).getTime()) >= TWENTY_THREE_HOURS_MS;
 
-      return isScheduledDue || isExpiringSoon;
+      return isNew24h || isScheduledDue || isExpiringSoon;
     });
   }, [leads]);
 
@@ -330,7 +334,20 @@ export default function DashboardPage() {
                     <h4 style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)' }}>{l.name}</h4>
                     <span style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)' }}>📍 {l.location || 'Unknown'}</span>
                   </div>
-                  {l.createdAt && (Date.now() - new Date(l.createdAt).getTime()) >= 23 * 60 * 60 * 1000 ? (
+                  {l.createdAt && (l.status || 'New') === 'New' && (Date.now() - new Date(l.createdAt).getTime()) >= 24 * 60 * 60 * 1000 ? (
+                    <span
+                      style={{
+                        padding: '0.15rem 0.5rem',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(239, 68, 68, 0.18)',
+                        color: 'var(--color-danger)',
+                        fontSize: '0.725rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      🚨 24h+ New Lead
+                    </span>
+                  ) : l.createdAt && (Date.now() - new Date(l.createdAt).getTime()) >= 23 * 60 * 60 * 1000 ? (
                     <span
                       style={{
                         padding: '0.15rem 0.5rem',
@@ -341,7 +358,7 @@ export default function DashboardPage() {
                         fontWeight: 700,
                       }}
                     >
-                      Expires &lt;1h!
+                      Action Urgent (&lt;1h)
                     </span>
                   ) : (
                     <span

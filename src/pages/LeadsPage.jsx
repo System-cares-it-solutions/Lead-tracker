@@ -269,7 +269,7 @@ export default function LeadsPage() {
           loading={loading}
           employees={employees}
           currentUserRole={role}
-          hideImportExcel={role === ROLES.EMPLOYEE}
+          hideImportExcel={true}
           onStatusChange={updateStatus}
           onAssignLead={assignLead}
           onSwapLead={swapLead}

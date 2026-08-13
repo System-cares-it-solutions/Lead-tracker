@@ -34,6 +34,28 @@ export default function LeadsKanban({
 
   const cleanPhone = (phone) => (phone ? phone.replace(/[^0-9]/g, '') : '');
 
+  const handleContactAction = (lead, actionType) => {
+    const leadId = lead.id || lead._id;
+    if ((lead.status || 'New') === 'New') {
+      if (onStatusChange) {
+        onStatusChange(leadId, 'Contacted');
+      }
+    }
+    if (onAddActivity) {
+      const type = actionType === 'call' ? 'call' : 'note';
+      const note =
+        actionType === 'call'
+          ? `Phone call attempt made to lead (${lead.phone || 'No phone'}). Status set to Contacted.`
+          : `WhatsApp message attempt initiated with lead (${lead.phone || 'No phone'}). Status set to Contacted.`;
+      onAddActivity(leadId, {
+        type,
+        note,
+        text: note,
+        authorName: user?.name || 'System',
+      });
+    }
+  };
+
   // Extract unique platforms
   const platformOptions = useMemo(() => {
     const set = new Set();
@@ -275,12 +297,13 @@ export default function LeadsKanban({
                         {/* Footer Controls */}
                         <div className="kanban-card__footer">
                           <div className="kanban-card__contact-btns">
-                            {lead.phone && lead.phone !== '—' && (
+                             {lead.phone && lead.phone !== '—' && (
                               <>
                                 <a
                                   href={`tel:${cleanPhone(lead.phone)}`}
                                   className="kanban-btn kanban-btn--call"
                                   title="Call Lead"
+                                  onClick={() => handleContactAction(lead, 'call')}
                                 >
                                   <Phone size={14} />
                                 </a>
@@ -290,6 +313,7 @@ export default function LeadsKanban({
                                   rel="noopener noreferrer"
                                   className="kanban-btn kanban-btn--whatsapp"
                                   title="WhatsApp"
+                                  onClick={() => handleContactAction(lead, 'whatsapp')}
                                 >
                                   <MessageSquare size={14} />
                                 </a>

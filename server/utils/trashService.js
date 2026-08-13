@@ -77,63 +77,58 @@ export async function checkAndTrashExpiredLeads() {
       }
     }
 
-    // ── 2. Find active leads created 24+ hours ago and move to Trash ──
-    const expiredLeads = await Lead.find({
+    // ── 2. Check leads in 'New' status for 24+ hours and notify Employee & Admin ──
+    const newExpiredLeads = await Lead.find({
       createdAt: { $lte: twentyFourHoursAgo },
-      status: { $ne: 'Trash' },
+      status: 'New',
+      notifiedNew24h: { $ne: true },
     });
 
-    if (expiredLeads && expiredLeads.length > 0) {
-      console.log(`[TrashService] Moving ${expiredLeads.length} lead(s) older than 24 hours to Trash...`);
+    for (const lead of newExpiredLeads) {
+      lead.notifiedNew24h = true;
 
-      for (const lead of expiredLeads) {
-        lead.status = 'Trash';
-        lead.trashedAt = new Date();
+      const activityNote = '🚨 URGENT: Lead has remained in New status for 24 hours! Immediate Action Needed.';
+      lead.activities.unshift({
+        id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        type: 'note',
+        note: activityNote,
+        authorName: 'System',
+        timestamp: new Date().toISOString(),
+      });
 
-        const activityNote = 'Lead automatically moved to Trash after 24 hours.';
-        lead.activities.unshift({
-          id: `act_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
-          type: 'note',
-          note: activityNote,
-          authorName: 'System',
-          timestamp: new Date().toISOString(),
-        });
+      await lead.save();
 
-        await lead.save();
+      const timestamp = Date.now();
+      const uniqueSuffix = Math.random().toString(36).substr(2, 4);
 
-        const timestamp = Date.now();
-        const uniqueSuffix = Math.random().toString(36).substr(2, 4);
+      // Notify Admin
+      await Notification.create({
+        id: `notif_${timestamp}_admin_24h_${uniqueSuffix}`,
+        title: '🚨 Immediate Action Needed!',
+        message: `Lead "${lead.name}" (${lead.assignedTo || 'Unassigned'}) has been in New status for 24 hours! Immediate Action Needed.`,
+        type: 'warning',
+        recipientRole: 'admin',
+      });
 
-        // Notify Admin
+      // Notify Assigned Employee if assigned
+      let employeeRecipient = lead.assignedToRaw;
+      if (!employeeRecipient && lead.assignedTo && lead.assignedTo !== 'Unassigned') {
+        const emp = await User.findOne({
+          $or: [{ id: lead.assignedTo }, { name: lead.assignedTo }],
+        }).lean();
+        if (emp) {
+          employeeRecipient = emp.id;
+        }
+      }
+
+      if (employeeRecipient) {
         await Notification.create({
-          id: `notif_${timestamp}_admin_${uniqueSuffix}`,
-          title: 'Lead Moved to Trash',
-          message: `Lead "${lead.name}" (${lead.assignedTo || 'Unassigned'}) was automatically moved to trash after 24 hours.`,
-          type: 'trash',
-          recipientRole: 'admin',
+          id: `notif_${timestamp}_emp_24h_${uniqueSuffix}`,
+          title: '🚨 Immediate Action Needed!',
+          message: `Your assigned lead "${lead.name}" has been in New status for 24 hours! Immediate Action Needed.`,
+          type: 'warning',
+          recipientId: employeeRecipient,
         });
-
-        // Notify Assigned Employee if assigned
-        let employeeRecipient = lead.assignedToRaw;
-
-        if (!employeeRecipient && lead.assignedTo && lead.assignedTo !== 'Unassigned') {
-          const emp = await User.findOne({
-            $or: [{ id: lead.assignedTo }, { name: lead.assignedTo }],
-          }).lean();
-          if (emp) {
-            employeeRecipient = emp.id;
-          }
-        }
-
-        if (employeeRecipient) {
-          await Notification.create({
-            id: `notif_${timestamp}_emp_${uniqueSuffix}`,
-            title: 'Lead Moved to Trash',
-            message: `Your assigned lead "${lead.name}" was automatically moved to trash after 24 hours.`,
-            type: 'trash',
-            recipientId: employeeRecipient,
-          });
-        }
       }
     }
 

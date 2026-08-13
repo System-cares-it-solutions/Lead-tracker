@@ -52,6 +52,13 @@ export default function Sidebar({ isOpen, onClose }) {
             Dashboard
           </NavLink>
 
+          {isAdmin && (
+            <NavLink to="/assignment" className={linkClass} onClick={onClose}>
+              <span className="sidebar__link-icon"><UserCheck size={18} /></span>
+              Assign Leads
+            </NavLink>
+          )}
+
           <NavLink to="/leads" className={linkClass} onClick={onClose}>
             <span className="sidebar__link-icon"><Users size={18} /></span>
             {role === ROLES.EMPLOYEE ? 'My Leads' : 'All Leads'}
@@ -75,11 +82,6 @@ export default function Sidebar({ isOpen, onClose }) {
           {isAdmin && (
             <>
               <span className="sidebar__section-title">Management</span>
-
-              <NavLink to="/assignment" className={linkClass} onClick={onClose}>
-                <span className="sidebar__link-icon"><UserCheck size={18} /></span>
-                Assign Leads
-              </NavLink>
 
               <NavLink to="/employees" className={linkClass} onClick={onClose}>
                 <span className="sidebar__link-icon"><Building2 size={18} /></span>
