@@ -31,6 +31,47 @@ const leadSchema = new mongoose.Schema(
     expirationWarned: { type: Boolean, default: false },
     notifiedNew24h: { type: Boolean, default: false },
     trashedAt: { type: Date, default: null },
+
+    // ── Enterprise Fields ──
+    dealValue: { type: Number, default: 0 },
+    currency: { type: String, default: 'INR' },
+    priority: {
+      type: String,
+      enum: ['Low', 'Medium', 'High', 'Critical'],
+      default: 'Medium',
+    },
+    leadScore: { type: Number, default: 0, min: 0, max: 100 },
+    source: {
+      type: String,
+      default: 'Website',
+    },
+    company: { type: String, default: '' },
+    designation: { type: String, default: '' },
+    tags: { type: [String], default: [] },
+    expectedCloseDate: { type: Date, default: null },
+    lostReason: { type: String, default: '' },
+    wonDate: { type: Date, default: null },
+    lastContactedAt: { type: Date, default: null },
+    contactMethod: { type: String, default: '' },
+
+    // ── Advanced Enterprise Fields ──
+    customFields: { type: mongoose.Schema.Types.Mixed, default: {} },
+    pipeline: { type: String, default: 'default' },
+    attachmentCount: { type: Number, default: 0 },
+    commentCount: { type: Number, default: 0 },
+    taskCount: { type: Number, default: 0 },
+    conversionProbability: { type: Number, default: 0, min: 0, max: 100 },
+    engagementScore: { type: Number, default: 0, min: 0, max: 100 },
+    touchpoints: { type: Number, default: 0 },
+    firstResponseAt: { type: Date, default: null },
+    averageResponseTime: { type: Number, default: 0 }, // in minutes
+    stageEnteredAt: { type: Date, default: null },
+    stageHistory: [{
+      stage: String,
+      enteredAt: Date,
+      exitedAt: Date,
+      duration: Number, // in minutes
+    }],
   },
   { timestamps: true }
 );
@@ -38,5 +79,11 @@ const leadSchema = new mongoose.Schema(
 leadSchema.index({ assignedToRaw: 1 });
 leadSchema.index({ assignedTo: 1 });
 leadSchema.index({ createdAt: -1 });
+leadSchema.index({ status: 1 });
+leadSchema.index({ priority: 1 });
+leadSchema.index({ source: 1 });
+leadSchema.index({ dealValue: -1 });
+leadSchema.index({ leadScore: -1 });
+leadSchema.index({ company: 'text', name: 'text' });
 
 export default mongoose.model('Lead', leadSchema);

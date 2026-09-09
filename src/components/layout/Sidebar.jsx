@@ -10,6 +10,12 @@ import {
   Settings,
   Package,
   LogOut,
+  BarChart3,
+  FileText,
+  Shield,
+  CheckSquare,
+  Tag,
+  Copy,
 } from 'lucide-react';
 import './Sidebar.css';
 
@@ -74,10 +80,32 @@ export default function Sidebar({ isOpen, onClose }) {
             Import Leads
           </NavLink>
 
-          <NavLink to="/settings" className={linkClass} onClick={onClose}>
-            <span className="sidebar__link-icon"><Settings size={18} /></span>
-            Settings
+          <NavLink to="/tasks" className={linkClass} onClick={onClose}>
+            <span className="sidebar__link-icon"><CheckSquare size={18} /></span>
+            Tasks
           </NavLink>
+
+          {/* Enterprise Navigation */}
+          <span className="sidebar__section-title">Intelligence</span>
+
+          {isAdmin && (
+            <NavLink to="/analytics" className={linkClass} onClick={onClose}>
+              <span className="sidebar__link-icon"><BarChart3 size={18} /></span>
+              Analytics
+            </NavLink>
+          )}
+
+          <NavLink to="/reports" className={linkClass} onClick={onClose}>
+            <span className="sidebar__link-icon"><FileText size={18} /></span>
+            Reports
+          </NavLink>
+
+          {isAdmin && (
+            <NavLink to="/audit-log" className={linkClass} onClick={onClose}>
+              <span className="sidebar__link-icon"><Shield size={18} /></span>
+              Audit Log
+            </NavLink>
+          )}
 
           {isAdmin && (
             <>
@@ -87,8 +115,25 @@ export default function Sidebar({ isOpen, onClose }) {
                 <span className="sidebar__link-icon"><Building2 size={18} /></span>
                 Employees
               </NavLink>
+
+              <NavLink to="/tags" className={linkClass} onClick={onClose}>
+                <span className="sidebar__link-icon"><Tag size={18} /></span>
+                Tag Manager
+              </NavLink>
+
+              <NavLink to="/duplicates" className={linkClass} onClick={onClose}>
+                <span className="sidebar__link-icon"><Copy size={18} /></span>
+                Duplicates
+              </NavLink>
             </>
           )}
+
+          <span className="sidebar__section-title">Account</span>
+
+          <NavLink to="/settings" className={linkClass} onClick={onClose}>
+            <span className="sidebar__link-icon"><Settings size={18} /></span>
+            Settings
+          </NavLink>
         </nav>
 
         {/* Footer with Logout */}

@@ -1,6 +1,6 @@
 .sidebar {
   width: 250px;
-  min-height: 100vh;
+  height: 100vh;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -50,6 +50,19 @@
   flex-direction: column;
   gap: 0.35rem;
   overflow-y: auto;
+}
+
+.sidebar__nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar__nav::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
 }
 
 .sidebar__link {

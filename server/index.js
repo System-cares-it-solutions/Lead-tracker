@@ -10,9 +10,15 @@ import leadRoutes from './routes/leads.js';
 import employeeRoutes from './routes/employees.js';
 import productRoutes from './routes/products.js';
 import notificationRoutes from './routes/notifications.js';
+import analyticsRoutes from './routes/analytics.js';
+import auditRoutes from './routes/audit.js';
+import commentRoutes from './routes/comments.js';
+import taskRoutes from './routes/tasks.js';
+import tagRoutes from './routes/tags.js';
+import dashboardRoutes from './routes/dashboard.js';
 
-import { seedDatabase } from './seed.js';
 import { checkAndTrashExpiredLeads } from './utils/trashService.js';
+import { runAutomationEngine } from './utils/automationEngine.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -45,6 +51,12 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/comments', commentRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/tags', tagRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -54,13 +66,18 @@ app.get('/api/health', (req, res) => {
 // Start Server & Connect MongoDB
 const startServer = async () => {
   await connectDB();
-  await seedDatabase();
 
   // Run initial 24-hour auto-trash check & setup periodic interval (every 1 min)
   await checkAndTrashExpiredLeads();
   setInterval(() => {
     checkAndTrashExpiredLeads();
   }, 60 * 1000);
+
+  // Run automation engine every 5 minutes
+  await runAutomationEngine();
+  setInterval(() => {
+    runAutomationEngine();
+  }, 5 * 60 * 1000);
 
   app.listen(PORT, () => {
     console.log(`[Express Server] Server running on http://localhost:${PORT}`);

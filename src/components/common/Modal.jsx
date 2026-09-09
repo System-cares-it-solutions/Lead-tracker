@@ -14,7 +14,7 @@ import './Modal.css';
  *   footer?: React.ReactNode,
  * }} props
  */
-export default function Modal({ isOpen, onClose, title, children, footer }) {
+export default function Modal({ isOpen = true, onClose, title, children, footer }) {
   const backdropRef = useRef(null);
 
   /* Close on Escape key */

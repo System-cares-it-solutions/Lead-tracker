@@ -4,21 +4,32 @@ import Button from '../common/Button';
 import Spinner from '../common/Spinner';
 import { autoAssignLead } from '../../utils/assignmentRules';
 import * as api from '../../services/api';
+import {
+  formatCurrency,
+  getScoreColor,
+  PRIORITY_COLORS,
+  STATUS_COLORS,
+} from '../../utils/leadStatuses';
 import './LeadsTable.css';
 
-/**
- * LeadsTable component.
- * Displays: Source, Name, Email, Phone, Location, Assigned to, Days Remaining, Call Attempts, Notes, and Actions.
- * Implements a 24-Hour Aging Policy with visual alerts and inline Call Attempts tracking.
- *
- * @param {{
- *   leads?: object[],
- *   loading?: boolean,
- *   employees?: object[],
- *   onDeleteClick?: (lead: object) => void,
- * }} props
- */
-import { Inbox, Check, X, Pencil, UploadCloud, DownloadCloud, Search, Trash2, ArrowUpDown, Filter, Notebook, ArrowRightLeft, Share2, Phone, Mail, MessageSquare } from 'lucide-react';
+import {
+  Inbox,
+  Check,
+  X,
+  Pencil,
+  UploadCloud,
+  DownloadCloud,
+  Search,
+  Trash2,
+  ArrowUpDown,
+  Filter,
+  Notebook,
+  ArrowRightLeft,
+  Share2,
+  Phone,
+  Mail,
+  MessageSquare,
+} from 'lucide-react';
 import NotepadModal from './NotepadModal';
 import SwapLeadModal from './SwapLeadModal';
 import ShareProductToLeadModal from './ShareProductToLeadModal';
@@ -39,6 +50,9 @@ export default function LeadsTable({
   onStatusChange,
   showAssignAction = false,
   hideImportExcel = true,
+  selectedLeads,
+  onToggleSelect,
+  onToggleSelectAll,
 }) {
   const { user } = useAuth();
   const fileInputRef = useRef(null);
@@ -55,7 +69,7 @@ export default function LeadsTable({
     }
   }, [propLeads]);
 
-  // Bulk actions state
+  // Bulk actions state (fallback if parent props not provided)
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
 
   // Active sorting order state: 'oldest' | 'newest'
@@ -166,15 +180,24 @@ export default function LeadsTable({
   };
 
   const handleExportExcel = () => {
-    const dataToExport = (selectedLeadIds.length > 0
-      ? filteredLeads.filter((l) => selectedLeadIds.includes(l.id))
+    const activeSelection = selectedLeads
+      ? Array.from(selectedLeads)
+      : selectedLeadIds;
+
+    const dataToExport = (activeSelection.length > 0
+      ? filteredLeads.filter((l) => activeSelection.includes(l.id))
       : filteredLeads
     ).map((l) => ({
       Platform: l.platform || '—',
+      Source: l.source || '—',
+      Company: l.company || '—',
       Name: l.name || '—',
       Email: l.email || '—',
       Phone: l.phone || '—',
       Location: l.location || '—',
+      'Deal Value': l.dealValue || 0,
+      'Lead Score': l.leadScore || 0,
+      Priority: l.priority || 'Medium',
       Status: l.status || 'New',
       'Assigned To': getAssigneeDisplay(l.assignedToRaw),
       'Call Attempts': l.callCount || 0,
@@ -198,7 +221,8 @@ export default function LeadsTable({
   const platformOptions = useMemo(() => {
     const platforms = new Set();
     leads.forEach((l) => {
-      if (l.platform && l.platform !== '—') platforms.add(l.platform);
+      const pl = l.source || l.platform;
+      if (pl && pl !== '—') platforms.add(pl);
     });
     return Array.from(platforms);
   }, [leads]);
@@ -222,7 +246,9 @@ export default function LeadsTable({
           (l.email && l.email.toLowerCase().includes(term)) ||
           (l.phone && l.phone.toLowerCase().includes(term)) ||
           (l.location && l.location.toLowerCase().includes(term)) ||
+          (l.company && l.company.toLowerCase().includes(term)) ||
           (l.platform && l.platform.toLowerCase().includes(term)) ||
+          (l.source && l.source.toLowerCase().includes(term)) ||
           (l.notes && l.notes.toLowerCase().includes(term));
         if (!matchesSearch) return false;
       }
@@ -234,7 +260,8 @@ export default function LeadsTable({
       }
 
       if (platformFilter !== 'all') {
-        if ((l.platform || '').toLowerCase() !== platformFilter.toLowerCase()) {
+        const pl = l.source || l.platform || '';
+        if (pl.toLowerCase() !== platformFilter.toLowerCase()) {
           return false;
         }
       }
@@ -275,7 +302,12 @@ export default function LeadsTable({
         notes: l.notes || l.Notes || '—',
         createdAt: l.createdAt || l.CreatedAt || new Date().toISOString(),
         callCount: Number(l.callCount || l.CallCount) || 0,
-        activities: l.activities || []
+        activities: l.activities || [],
+        dealValue: Number(l.dealValue || 0),
+        leadScore: Number(l.leadScore || 0),
+        priority: l.priority || 'Medium',
+        company: l.company || '',
+        source: l.source || 'Website',
       }));
 
       // Preserve any locally imported leads so they are not wiped out by parent renders
@@ -295,25 +327,11 @@ export default function LeadsTable({
     return assignedTo;
   };
 
-  /**
-   * Helper function to strip non-numeric characters (dashes, spaces, '+')
-   * from the phone string before using it in Call/WhatsApp links.
-   *
-   * @param {string} phone
-   * @returns {string}
-   */
   const cleanPhoneNumber = (phone) => {
     if (!phone) return '';
     return phone.replace(/[^0-9]/g, '');
   };
 
-  /**
-   * Calculates remaining hours before the 24-hour mark and returns
-   * visual styling classes along with display values.
-   *
-   * @param {string} createdAt
-   * @returns {{ rowClass: string, statusText: string, daysVal: number }}
-   */
   const getExpiryDetails = (createdAt, status) => {
     if (status === 'Trash') {
       return { rowClass: 'row-expired', statusText: 'In Trash', daysVal: 0 };
@@ -321,12 +339,6 @@ export default function LeadsTable({
     return { rowClass: 'row-normal', statusText: status || 'New', daysVal: 0 };
   };
 
-  /**
-   * Updates the call attempts count for a specific lead in the local state.
-   *
-   * @param {string} id
-   * @param {number} count
-   */
   const handleCallCountChange = (id, count) => {
     setLeads((prev) => {
       const updated = prev.map((lead) => (lead.id === id ? { ...lead, callCount: count } : lead));
@@ -344,13 +356,6 @@ export default function LeadsTable({
     }
   };
 
-  /**
-   * Helper to handle contact action (Call, Mail, WhatsApp),
-   * increment the attempt count automatically, and add a lead activity log.
-   *
-   * @param {object|string} leadOrId
-   * @param {'call'|'mail'|'whatsapp'} actionType
-   */
   const handleActionAttempt = (leadOrId, actionType) => {
     const targetLead =
       typeof leadOrId === 'object' && leadOrId !== null
@@ -433,24 +438,29 @@ export default function LeadsTable({
 
   const handleBulkAssign = async (e) => {
     const empId = e.target.value;
-    if (!empId || selectedLeadIds.length === 0) return;
+    const activeSelection = selectedLeads
+      ? Array.from(selectedLeads)
+      : selectedLeadIds;
+
+    if (!empId || activeSelection.length === 0) return;
     const selectedEmp = employees.find((emp) => emp.id === empId);
     const empName = selectedEmp ? selectedEmp.name : 'Unassigned';
 
     try {
-      for (const id of selectedLeadIds) {
+      for (const id of activeSelection) {
         if (onAssignLead) {
           await onAssignLead(id, empId);
         }
       }
       setLeads((prev) =>
         prev.map((l) =>
-          selectedLeadIds.includes(l.id)
+          activeSelection.includes(l.id)
             ? { ...l, assignedTo: empName, assignedToRaw: empId }
             : l
         )
       );
-      setSelectedLeadIds([]);
+      if (onToggleSelectAll) onToggleSelectAll();
+      else setSelectedLeadIds([]);
       e.target.value = '';
     } catch (err) {
       console.error('Failed to bulk assign leads:', err);
@@ -459,20 +469,25 @@ export default function LeadsTable({
 
   const handleBulkStatusChange = async (e) => {
     const newStatus = e.target.value;
-    if (!newStatus || selectedLeadIds.length === 0) return;
+    const activeSelection = selectedLeads
+      ? Array.from(selectedLeads)
+      : selectedLeadIds;
+
+    if (!newStatus || activeSelection.length === 0) return;
 
     try {
-      for (const id of selectedLeadIds) {
+      for (const id of activeSelection) {
         if (onStatusChange) {
           await onStatusChange(id, newStatus);
         }
       }
       setLeads((prev) =>
         prev.map((l) =>
-          selectedLeadIds.includes(l.id) ? { ...l, status: newStatus } : l
+          activeSelection.includes(l.id) ? { ...l, status: newStatus } : l
         )
       );
-      setSelectedLeadIds([]);
+      if (onToggleSelectAll) onToggleSelectAll();
+      else setSelectedLeadIds([]);
       e.target.value = '';
     } catch (err) {
       console.error('Failed to bulk change status:', err);
@@ -482,25 +497,34 @@ export default function LeadsTable({
   /**
    * Selection Handlers
    */
-  const isAllSelected = sortedLeads.length > 0 && selectedLeadIds.length === sortedLeads.length;
+  const activeSelectionCount = selectedLeads
+    ? selectedLeads.size
+    : selectedLeadIds.length;
+
+  const isAllSelected = sortedLeads.length > 0 && activeSelectionCount === sortedLeads.length;
 
   const handleSelectAllToggle = () => {
-    if (isAllSelected) {
-      setSelectedLeadIds([]);
+    if (onToggleSelectAll) {
+      onToggleSelectAll();
     } else {
-      setSelectedLeadIds(sortedLeads.map((l) => l.id));
+      if (isAllSelected) {
+        setSelectedLeadIds([]);
+      } else {
+        setSelectedLeadIds(sortedLeads.map((l) => l.id));
+      }
     }
   };
 
   const handleRowSelectToggle = (id) => {
-    setSelectedLeadIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    if (onToggleSelect) {
+      onToggleSelect(id);
+    } else {
+      setSelectedLeadIds((prev) =>
+        prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      );
+    }
   };
 
-  /**
-   * Deletes a single lead by ID.
-   */
   const handleDelete = async (leadId) => {
     const leadObj = leads.find((l) => l.id === leadId);
     const leadName = leadObj ? leadObj.name : 'this lead';
@@ -526,19 +550,20 @@ export default function LeadsTable({
     }
   };
 
-  /**
-   * Deletes all currently selected leads.
-   */
   const handleDeleteSelected = async () => {
-    if (selectedLeadIds.length === 0) return;
-    const count = selectedLeadIds.length;
+    const activeSelection = selectedLeads
+      ? Array.from(selectedLeads)
+      : selectedLeadIds;
+
+    if (activeSelection.length === 0) return;
+    const count = activeSelection.length;
     if (
       window.confirm(
         `Are you sure you want to completely delete ${count} selected lead(s)?`
       )
     ) {
       try {
-        const idsToDelete = [...selectedLeadIds];
+        const idsToDelete = [...activeSelection];
         for (const id of idsToDelete) {
           if (onDeleteClick) {
             const leadObj = leads.find((l) => l.id === id);
@@ -554,16 +579,14 @@ export default function LeadsTable({
           }
           return updated;
         });
-        setSelectedLeadIds([]);
+        if (onToggleSelectAll) onToggleSelectAll();
+        else setSelectedLeadIds([]);
       } catch (err) {
         console.error('Failed to delete selected leads:', err);
       }
     }
   };
 
-  /**
-   * Automatically assigns all leads in the table based on location and language matching.
-   */
   const handleAutoAssignAll = async () => {
     if (!leads || leads.length === 0) return;
 
@@ -602,9 +625,6 @@ export default function LeadsTable({
     alert(`⚡ Auto-assigned ${assignedCount} lead(s) based on location & language matching!`);
   };
 
-  /**
-   * Removes all leads from local state after calling onDeleteAllClick callback.
-   */
   const handleDeleteAll = async () => {
     if (onDeleteAllClick) {
       await onDeleteAllClick();
@@ -617,11 +637,6 @@ export default function LeadsTable({
     }
   };
 
-  /**
-   * Parses an Excel file using the xlsx library and maps specific columns.
-   *
-   * @param {React.ChangeEvent<HTMLInputElement>} e
-   */
   const handleImportExcel = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -716,7 +731,9 @@ export default function LeadsTable({
             assignedTo: finalAssignee,
             notes: getVal('notes') || '—',
             createdAt: getVal('createdAt') || new Date().toISOString(),
-            callCount: Number(getVal('callCount')) || 0
+            callCount: Number(getVal('callCount')) || 0,
+            priority: 'Medium',
+            source: getVal('platform') || 'Website',
           };
         });
 
@@ -745,6 +762,10 @@ export default function LeadsTable({
   const triggerFileInput = () => {
     fileInputRef.current?.click();
   };
+
+  const activeSelectionArray = selectedLeads
+    ? Array.from(selectedLeads)
+    : selectedLeadIds;
 
   if (loading) return <Spinner />;
 
@@ -864,7 +885,7 @@ export default function LeadsTable({
             </Button>
           )}
 
-          {selectedLeadIds.length > 0 && (
+          {activeSelectionArray.length > 0 && (
             <>
               {employees.length > 0 && (
                 <select
@@ -875,7 +896,7 @@ export default function LeadsTable({
                   style={{ background: 'var(--color-primary-light)', color: 'var(--color-primary)', fontWeight: 700 }}
                 >
                   <option value="" disabled>
-                    Bulk Assign ({selectedLeadIds.length})...
+                    Bulk Assign ({activeSelectionArray.length})...
                   </option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
@@ -893,7 +914,7 @@ export default function LeadsTable({
                 style={{ background: 'var(--color-surface-elevated)', fontWeight: 600 }}
               >
                 <option value="" disabled>
-                  Bulk Status ({selectedLeadIds.length})...
+                  Bulk Status ({activeSelectionArray.length})...
                 </option>
                 <option value="New">Move to New</option>
                 <option value="Contacted">Move to Contacted</option>
@@ -908,7 +929,7 @@ export default function LeadsTable({
                 title="Delete selected leads"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
               >
-                <Trash2 size={16} /> Delete Selected ({selectedLeadIds.length})
+                <Trash2 size={16} /> Delete Selected ({activeSelectionArray.length})
               </Button>
             </>
           )}
@@ -941,10 +962,12 @@ export default function LeadsTable({
                   title="Select / Deselect All"
                 />
               </th>
-              <th>Platform</th>
+              <th>Platform / Source</th>
+              <th>Company</th>
               <th>Name</th>
-              <th>Email</th>
-              <th>Phone</th>
+              <th>Deal Value</th>
+              <th>Lead Score</th>
+              <th>Priority</th>
               <th>Location</th>
               <th>Assigned to</th>
               <th>Status</th>
@@ -953,19 +976,27 @@ export default function LeadsTable({
           </thead>
           <tbody>
             {filteredLeads.map((lead) => {
-              const { rowClass, statusText } = getExpiryDetails(lead.createdAt, lead.status);
+              const { rowClass } = getExpiryDetails(lead.createdAt, lead.status);
+              const isSelected = activeSelectionArray.includes(lead.id);
+              const scoreColor = getScoreColor(lead.leadScore || 0);
+
               return (
-                <tr key={lead.id} className={rowClass}>
+                <tr key={lead.id} className={`${rowClass} ${isSelected ? 'row-selected' : ''}`}>
                   <td style={{ textAlign: 'center' }}>
                     <input
                       type="checkbox"
                       className="leads-table__checkbox"
-                      checked={selectedLeadIds.includes(lead.id)}
+                      checked={isSelected}
                       onChange={() => handleRowSelectToggle(lead.id)}
                       title={`Select ${lead.name}`}
                     />
                   </td>
-                  <td className="leads-table__secondary" title={lead.platform}>{lead.platform || '—'}</td>
+                  <td className="leads-table__secondary" title={lead.source || lead.platform}>
+                    {lead.source || lead.platform || '—'}
+                  </td>
+                  <td style={{ fontWeight: 600 }} title={lead.company}>
+                    {lead.company || '—'}
+                  </td>
                   <td className="leads-table__name" title={lead.name}>
                     {lead.name || '—'}
                     {rowClass === 'row-expired' && (
@@ -973,39 +1004,33 @@ export default function LeadsTable({
                         Expired
                       </span>
                     )}
-                    {rowClass === 'row-warning' && (
-                      <span className="leads-table__status-badge leads-table__status-badge--warning">
-                        Urgent
-                      </span>
-                    )}
                   </td>
-                  <td className="leads-table__secondary" title={lead.email}>
-                    {lead.email && lead.email !== '—' ? (
-                      <a
-                        href={`mailto:${lead.email}`}
-                        className="leads-table__link"
-                        title={`Email ${lead.name} (Logs activity & increments attempt count)`}
-                        onClick={() => handleMailClick(lead)}
-                      >
-                        {lead.email}
-                      </a>
-                    ) : (
-                      '—'
-                    )}
+                  <td style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                    {lead.dealValue > 0 ? formatCurrency(lead.dealValue) : '—'}
                   </td>
-                  <td className="leads-table__secondary" title={lead.phone}>
-                    {lead.phone && lead.phone !== '—' ? (
-                      <a
-                        href={`tel:${cleanPhoneNumber(lead.phone)}`}
-                        className="leads-table__link"
-                        title={`Call ${lead.name} (Logs activity & increments attempt count)`}
-                        onClick={() => handleCallClick(lead)}
-                      >
-                        {lead.phone}
-                      </a>
-                    ) : (
-                      '—'
-                    )}
+                  <td style={{ textAlign: 'center' }}>
+                    <span style={{
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: 'var(--radius-sm)',
+                      background: `${scoreColor}15`,
+                      color: scoreColor,
+                      fontWeight: 800,
+                      fontSize: '0.75rem'
+                    }}>
+                      {lead.leadScore || 0}
+                    </span>
+                  </td>
+                  <td>
+                    <span style={{
+                      padding: '0.15rem 0.45rem',
+                      borderRadius: 'var(--radius-sm)',
+                      background: PRIORITY_COLORS[lead.priority || 'Medium']?.bg || 'rgba(100,116,139,0.12)',
+                      color: PRIORITY_COLORS[lead.priority || 'Medium']?.text || '#64748b',
+                      fontWeight: 700,
+                      fontSize: '0.75rem'
+                    }}>
+                      {lead.priority || 'Medium'}
+                    </span>
                   </td>
                   <td className="leads-table__secondary" title={lead.location}>{lead.location || '—'}</td>
                   <td title={getAssigneeDisplay(lead.assignedToRaw)}>
@@ -1057,18 +1082,7 @@ export default function LeadsTable({
                       className="leads-table__call-select"
                       style={{
                         fontWeight: '600',
-                        color:
-                          lead.status === 'Won'
-                            ? 'var(--color-success)'
-                            : lead.status === 'Lost'
-                            ? 'var(--color-danger)'
-                            : lead.status === 'Trash'
-                            ? '#64748b'
-                            : lead.status === 'Qualified'
-                            ? '#8b5cf6'
-                            : lead.status === 'Contacted'
-                            ? 'var(--color-info)'
-                            : 'var(--color-primary)',
+                        color: STATUS_COLORS[lead.status || 'New']?.text || 'var(--color-primary)',
                       }}
                       title={`Change status for ${lead.name}`}
                     >

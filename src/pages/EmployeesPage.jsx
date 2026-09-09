@@ -7,7 +7,9 @@ import AddEmployeeModal from '../components/employees/AddEmployeeModal';
 import EditEmployeeModal from '../components/employees/EditEmployeeModal';
 import EmployeeDetailsModal from '../components/employees/EmployeeDetailsModal';
 import AddLeadModal from '../components/leads/AddLeadModal';
+import WorkloadChart from '../components/employees/WorkloadChart';
 import Spinner from '../components/common/Spinner';
+import * as api from '../services/api';
 import {
   Building2,
   Pencil,
@@ -19,7 +21,11 @@ import {
   CheckCircle2,
   Eye,
   LayoutGrid,
-  Table as TableIcon
+  Table as TableIcon,
+  ToggleLeft,
+  ToggleRight,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 
 export default function EmployeesPage() {
@@ -80,6 +86,15 @@ export default function EmployeesPage() {
       } catch (err) {
         console.error('Failed to remove employee:', err);
       }
+    }
+  };
+
+  const handleToggleActive = async (employee) => {
+    try {
+      await api.toggleEmployeeActive(employee.id);
+      updateEmployee(employee.id, { isActive: employee.isActive === false ? true : false });
+    } catch (err) {
+      console.error('Failed to toggle status:', err);
     }
   };
 
@@ -200,10 +215,13 @@ export default function EmployeesPage() {
           </div>
           <div>
             <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--color-text)' }}>{employeeStats.avgLeads}</div>
-            <div style={{ fontSize: '0.775rem', color: 'var(--color-text-dimmed)' }}>Avg Workload / Rep</div>
+            <div style={{ fontSize: '0.775rem', color: 'var(--color-text-dimmed)' }}>Avg Leads / Rep</div>
           </div>
         </div>
       </div>
+
+      {/* ── Team Capacity & Workload Chart ── */}
+      <WorkloadChart />
 
       {/* Search Bar */}
       <div style={{ position: 'relative', width: '320px' }}>
@@ -271,7 +289,14 @@ export default function EmployeesPage() {
                     <td className="employees-table__secondary" title={emp.location || '—'}>{emp.location || '—'}</td>
                     <td className="employees-table__secondary" title={emp.language || emp.languages || 'English'}>{emp.language || emp.languages || 'English'}</td>
                     <td>
-                      <span className="leads-table__assigned">
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                        padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-full)',
+                        fontSize: '0.7rem', fontWeight: 700,
+                        background: emp.isActive !== false ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                        color: emp.isActive !== false ? '#10b981' : '#ef4444',
+                      }}>
+                        {emp.isActive !== false ? <ShieldCheck size={12} /> : <ShieldAlert size={12} />}
                         {ROLE_LABELS[emp.role] || emp.role}
                       </span>
                     </td>
@@ -282,6 +307,15 @@ export default function EmployeesPage() {
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleToggleActive(emp)}
+                          title={emp.isActive !== false ? 'Deactivate Member' : 'Activate Member'}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem', color: emp.isActive !== false ? '#10b981' : 'var(--color-text-dimmed)' }}
+                        >
+                          {emp.isActive !== false ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                        </Button>
                         <Button
                           variant="secondary"
                           size="sm"
